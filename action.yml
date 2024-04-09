@@ -1,73 +1,55 @@
-name: 'deploy app'
-description: 'deploy application to the DOKS cluster'
+name: 'deploy with pulumi'
+description: 'deploy IaC stack with Pulumi'
 inputs:
-  sha:
-    description: 'commit SHA'
-    required: true
-  app:
-    description: 'app version'
+  node:
+    description: 'nodejs version'
     required: false
-    default: ''
-  environment:
-    description: 'environment name'
-    required: true
-  namespace:
-    description: 'k8s namespace'
-    required: true
-  deployment:
-    description: 'deployment name'
-    required: true
-  migrations:
-    description: 'migration job name'
+    default: '20'
+  workdir:
+    description: 'root directory for Pulumi files'
     required: false
-    default: ''
-  do-access-token:
-    description: 'DO access token'
-    required: true
-  cluster:
-    description: 'DOKS cluster name or ID'
-    required: true
-  kubectl:
-    description: 'kubectl version tag'
+    default: '.pulumi'
+  command:
+    description: 'pulumi command'
     required: false
-    default: 'latest'
+    default: 'up'
+  stack:
+    description: 'pulumi stack'
+    required: true
+  token:
+    description: 'pulumi access token'
+    required: true
 runs:
   using: "composite"
   steps:
-  - uses: digitalocean/action-doctl@v2
+  - name: checkout repository
+    uses: actions/checkout@v4
+  - name: setup node
+    uses: actions/setup-node@v4
     with:
-      token: ${{ inputs.do-access-token }}
-  - name: create temporary container
-    run: docker create --name kubectl ghcr.io/medius-pro/kubectl:${{ inputs.kubectl }} /medius-kubectl
-    shell: bash
-  - name: copy binary
-    run: docker cp kubectl:/medius-kubectl /usr/local/bin/doks
-    shell: bash
-  - name: set cluster config context
-    run: doctl kubernetes cluster kubeconfig save --expiry-seconds 600 ${{ inputs.cluster }}
-    shell: bash
-  - name: apply deployment
+      node-version: ${{ inputs.node }}
+  - name: restore pulumi dependencies cache
+    uses: actions/cache/restore@v4
+    id: pulumi-cache
+    with:
+      key: pulumi.cache.${{ hashFiles(format('{0}/package-lock.json', inputs.workdir)) }}
+      path: ${{ format('{0}/node_modules', inputs.workdir) }}
+  - name: install dependencies for pulumi
+    run: npm ci
+    shell: sh
+    if: steps.pulumi-cache.outputs.cache-hit != 'true'
+    working-directory: ${{ inputs.workdir }}
+  - name: update resources in the pulumi stack
+    uses: pulumi/actions@v5
+    with:
+      command: ${{ inputs.command }}
+      stack-name: ${{ inputs.stack }}
+      work-dir: ${{ inputs.workdir }}
     env:
-      COMMIT_SHA: ${{ inputs.sha }}
-      APP_VERSION: ${{ inputs.app }}
-    run: envsubst < .github/k8s/${{ inputs.environment }}.yaml | doks apply -f -
-    shell: bash
-  - name: wait for deployment to complete
-    run: doks -n ${{ inputs.namespace }} rollout status deployment/${{ inputs.deployment }}
-    shell: bash
-  - name: wait for migrations job to complete
-    if: inputs.migrations != ''
-    run: doks -n ${{ inputs.namespace }} wait --for=condition=Complete --timeout=30s job "${{ inputs.migrations }}" -o=jsonpath='{.status.conditions[*].type}' | grep -q Complete || exit 1
-    id: migrations
-    continue-on-error: true
-    shell: bash
-  - name: get logs from migrations job
-    if: success() && inputs.migrations != ''
-    run: doks -n ${{ inputs.namespace }} logs $(doks -n ${{ inputs.namespace }} get pod -l controller-uid=$(doks -n ${{ inputs.namespace }} get job "${{ inputs.migrations }}" -o "jsonpath={.metadata.labels.controller-uid}") -o name)
-    shell: bash
-  - name: throw an error if migrations job failed
-    if: failure() && steps.migrations.conclusion == 'failure' && inputs.migrations != ''
-    run: |
-      echo "database migration error"
-      exit 1
-    shell: bash
+      PULUMI_ACCESS_TOKEN: ${{ inputs.token }}
+  - name: save pulumi dependencies cache
+    uses: actions/cache/save@v4
+    if: steps.pulumi-cache.outputs.cache-hit != 'true'
+    with:
+      key: pulumi.cache.${{ hashFiles(format('{0}/package-lock.json', inputs.workdir)) }}
+      path: ${{ format('{0}/node_modules', inputs.workdir) }}
