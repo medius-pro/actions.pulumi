@@ -50,6 +50,7 @@ runs:
       stack-name: ${{ inputs.stack }}
       work-dir: ${{ inputs.workdir }}
     env:
+      STACK: ${{ inputs.stack }}
       IMAGE_TAG: ${{ inputs.tag }}
       PULUMI_ACCESS_TOKEN: ${{ inputs.token }}
   - name: save pulumi dependencies cache
