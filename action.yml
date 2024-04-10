@@ -1,6 +1,10 @@
 name: 'deploy with pulumi'
 description: 'deploy IaC stack with Pulumi'
 inputs:
+  tag:
+    description: 'image tag'
+    required: false
+    default: ${{ github.sha }}
   node:
     description: 'nodejs version'
     required: false
@@ -46,6 +50,7 @@ runs:
       stack-name: ${{ inputs.stack }}
       work-dir: ${{ inputs.workdir }}
     env:
+      IMAGE_TAG: ${{ inputs.tag }}
       PULUMI_ACCESS_TOKEN: ${{ inputs.token }}
   - name: save pulumi dependencies cache
     uses: actions/cache/save@v4
