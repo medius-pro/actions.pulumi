@@ -32,14 +32,23 @@ runs:
     uses: actions/setup-node@v4
     with:
       node-version: ${{ inputs.node }}
-  - name: restore pulumi dependencies cache
-    uses: actions/cache/restore@v4
-    id: pulumi-cache
+  - name: install pnpm
+    uses: pnpm/action-setup@v3
     with:
-      key: pulumi.cache.${{ hashFiles(format('{0}/package-lock.json', inputs.workdir)) }}
-      path: ${{ format('{0}/node_modules', inputs.workdir) }}
+      version: latest
+      run_install: false
+  - name: get pnpm store directory
+    shell: sh
+    run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+  - uses: actions/cache@v4
+    name: setup pnpm cache
+    with:
+      path: ${{ env.STORE_PATH }}
+      key: pulumi.cache.${{ hashFiles(format('{0}/pnpm-lock.yaml', inputs.workdir)) }}
+      restore-keys: |
+        pulumi.cache.
   - name: install dependencies for pulumi
-    run: npm ci
+    run: pnpm install
     shell: sh
     if: steps.pulumi-cache.outputs.cache-hit != 'true'
     working-directory: ${{ inputs.workdir }}
@@ -53,9 +62,3 @@ runs:
       STACK: ${{ inputs.stack }}
       IMAGE_TAG: ${{ inputs.tag }}
       PULUMI_ACCESS_TOKEN: ${{ inputs.token }}
-  - name: save pulumi dependencies cache
-    uses: actions/cache/save@v4
-    if: steps.pulumi-cache.outputs.cache-hit != 'true'
-    with:
-      key: pulumi.cache.${{ hashFiles(format('{0}/package-lock.json', inputs.workdir)) }}
-      path: ${{ format('{0}/node_modules', inputs.workdir) }}
