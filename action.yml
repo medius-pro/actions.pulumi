@@ -8,7 +8,7 @@ inputs:
   node:
     description: 'nodejs version'
     required: false
-    default: '20'
+    default: '21'
   workdir:
     description: 'root directory for Pulumi files'
     required: false
