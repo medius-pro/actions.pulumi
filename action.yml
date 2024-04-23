@@ -12,7 +12,7 @@ inputs:
   workdir:
     description: 'root directory for Pulumi files'
     required: false
-    default: '.pulumi'
+    default: '.IaC'
   command:
     description: 'pulumi command'
     required: false
